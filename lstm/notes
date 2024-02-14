@@ -1,0 +1,88 @@
+# forward pass
+
+pre_ft = Wf @ xt + Uf @ h(t-1) + bf
+ft = sigmoid(pre_ft)
+
+pre_it = Wi @ xt + Ui @ h(t-1) + bi
+it = sigmoid(pre_it)
+
+pre_ot = Wo @ xt + Uo @ h(t-1) + bo
+ot = sigmoid(pre_ot)
+
+pre_at = Wa @ xt + Ua @ h(t-1) + ba
+at = tanh(pre_at)
+
+ct = ft * c(t-1) + it * at
+
+et = tanh(ct)
+
+ht = ot * et
+
+yt = D @ ht # this one is to reduce the output dimension to vocab_len
+
+pt = softmax(yt)
+
+# backward pass
+
+dhnext = 0
+dcnext = 0
+
+dloss_wrt_p = cross_entropy_grad
+
+dp_wrt_y = softmax_grad(y[t])
+
+dy_wrt_D = dp_wrt_y @ h[t].T
+
+dy_wrt_h = D.T @ dp_wrt_y + dhnext
+
+dh_wrt_o = dy_wrt_h * e[t]
+
+dh_wrt_e = o[t] * dy_wrt_h
+
+do_wrt_pre_o = dh_wrt_o * sigmoid_grad(pre_o)
+
+dpre_o_wrt_bo = do_wrt_pre_o
+
+dpre_o_wrt_Uo = do_wrt_pre_o @ h[t-1].T
+
+dpre_o_wrt_Wo = do_wrt_pre_o @ x[t].T
+
+de_wrt_c = dh_wrt_e * tanh_grad(c[t]) + dcnext
+
+dcnext += f[t] * de_wrt_c
+
+dc_wrt_f = de_wrt_c * c[t-1]
+
+dc_wrt_i = de_wrt_c * a[t]
+
+dc_wrt_a = i[t] * de_wrt_c
+
+df_wrt_pre_f = dc_wrt_f * sigmoid_grad(pre_f)
+
+di_wrt_pre_i = dc_wrt_i * sigmoid_grad(pre_i)
+
+da_wrt_pre_a = dc_wrt_a * tanh_grad(pre_a)
+
+dpre_f_wrt_bf = df_wrt_pre_f
+
+dpre_f_wrt_Uf = df_wrt_pre_f @ h[t-1].T
+
+dpre_f_wrt_Wf = df_wrt_pre_f @ x[t].T
+
+dpre_i_wrt_bi = di_wrt_pre_i
+
+dpre_i_wrt_Ui = di_wrt_pre_i @ h[t-1].T
+
+dpre_i_wrt_Wi = di_wrt_pre_i @ x[t].T
+
+dpre_a_wrt_ba = da_wrt_pre_a
+
+dpre_a_wrt_Ua = da_wrt_pre_a @ h[t-1].T
+
+dpre_a_wrt_Wa = da_wrt_pre_a @ x[t].T
+
+dhnext += Uf.T @ df_wrt_pre_f
+dhnext += Ui.T @ di_wrt_pre_i
+dhnext += Uo.T @ do_wrt_pre_o
+dhnext += Ua.T @ da_wrt_pre_a
+

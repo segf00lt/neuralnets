@@ -1,0 +1,12 @@
+mlp/.ipynb_checkpoints/*
+seq2seq/de-en/*
+*.pkl
+*.vim
+rnn/min-char-rnn.py
+scratch.ipynb
+.DS_Store
+*loss.png
+*loss_numpy.png
+*.tgz
+rnn/data/*
+*/names.txt
