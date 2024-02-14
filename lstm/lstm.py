@@ -10,7 +10,7 @@ stoi = {chr(ord('a')+i): i+1 for i in range(26)}
 stoi['\n'] = 0
 itos = {v:k for k,v in stoi.items()}
 
-with open('names.txt', 'r') as f:
+with open('../data/names.txt', 'r') as f:
     data = f.readlines()
 
 def build_dataset(data):

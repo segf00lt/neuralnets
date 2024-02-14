@@ -4,7 +4,7 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
-with open('names.txt', 'r') as f:
+with open('../data/names.txt', 'r') as f:
     data = f.read().splitlines()
 
 stoi = {chr(ord('a') + i):i+1 for i in range(26)}

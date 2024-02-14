@@ -8,5 +8,4 @@ scratch.ipynb
 *loss.png
 *loss_numpy.png
 *.tgz
-rnn/data/*
-*/names.txt
+data/*

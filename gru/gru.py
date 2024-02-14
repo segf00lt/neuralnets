@@ -1,8 +1,6 @@
-# GRU
-
 import os
-import torch
-import torch.nn.functional as F
+import tinygrad as tg
+from tinygrad.tensor import Tensor
 import matplotlib.pyplot as plt
 import random
 
@@ -13,7 +11,7 @@ itos = {v:k for k,v in stoi.items()}
 with open('../data/names.txt', 'r') as f:
     data = f.readlines()
 
-rng = torch.random.manual_seed(42)
+Tensor.manual_seed(42)
 
 # hyperparams
 vocab_len = len(stoi)
@@ -21,19 +19,19 @@ hidden_dim = 150
 context_len = 8
 batch_size = 8
 
-Wr = torch.randn((vocab_len, hidden_dim), generator=rng) * 0.01
-Ur = torch.randn((hidden_dim, hidden_dim), generator=rng) * 0.01
-br = torch.zeros(hidden_dim)
+Wr = Tensor.randn((vocab_len, hidden_dim)) * 0.01
+Ur = Tensor.randn((hidden_dim, hidden_dim)) * 0.01
+br = Tensor.zeros(hidden_dim)
 
-Wz = torch.randn((vocab_len, hidden_dim), generator=rng) * 0.01
-Uz = torch.randn((hidden_dim, hidden_dim), generator=rng) * 0.01
-bz = torch.zeros(hidden_dim)
+Wz = Tensor.randn((vocab_len, hidden_dim)) * 0.01
+Uz = Tensor.randn((hidden_dim, hidden_dim)) * 0.01
+bz = Tensor.zeros(hidden_dim)
 
-Wa = torch.randn((vocab_len, hidden_dim), generator=rng) * 0.01
-Ua = torch.randn((hidden_dim, hidden_dim), generator=rng) * 0.01
-ba = torch.zeros(hidden_dim)
+Wa = Tensor.randn((vocab_len, hidden_dim)) * 0.01
+Ua = Tensor.randn((hidden_dim, hidden_dim)) * 0.01
+ba = Tensor.zeros(hidden_dim)
 
-Wy = torch.randn((hidden_dim, vocab_len), generator=rng) * 0.01
+Wy = Tensor.randn((hidden_dim, vocab_len)) * 0.01
 
 params = [
         Wr, Ur, br,
@@ -52,7 +50,7 @@ def build_dataset(data):
             X.append(ixs[:t] + pad)
             Y.append(ixs[1:t+1] + pad)
             pad = pad[:-1]
-    return torch.tensor(X), torch.tensor(Y)
+    return Tensor(X), Tensor(Y)
 
 random.seed(42)
 random.shuffle(data)
@@ -62,52 +60,60 @@ Xtrain, Ytrain = build_dataset(data[:n1])
 Xval, Yval = build_dataset(data[n1:n2])
 Xtest, Ytest = build_dataset(data[:n2])
 
+def one_hot(ix, num_classes):
+    t = Tensor.zeros(num_classes)
+    t[ix]
+
 def forward(x, hprev):
     pre_r = Wr[x] + hprev @ Ur + br
-    r = F.sigmoid(pre_r)
+    r = pre_r.sigmoid()
     pre_z = Wz[x] + hprev @ Uz + bz
     pre_a = Wa[x] + (r * hprev) @ Ua + ba
-    z = F.sigmoid(pre_z)
-    a = torch.tanh(pre_a)
+    z = pre_z.sigmoid()
+    a = pre_a.tanh()
     h = (1 - z) * hprev + z * a
     y = h @ Wy
     return y, h
 
 def sample(seed):
-    with torch.no_grad():
-        assert type(seed) == int
-        out = [seed]
-        h = torch.zeros(hidden_dim)
-        ix = seed
-        for t in range(context_len):
-            y, h = forward(ix, h)
-            ix = torch.multinomial(F.softmax(y, dim=-1), 1, generator=rng).item()
-            if ix == 0: break
-            out.append(ix)
+    Tensor.no_grad = True
+    assert type(seed) == int
+    out = [seed]
+    h = torch.zeros(hidden_dim)
+    ix = seed
+    for t in range(context_len):
+        y, h = forward(ix, h)
+        ix = y.softmax().multinomial().item()
+        if ix == 0: break
+        out.append(ix)
+    Tensor.no_grad = False
     return ''.join(itos[i] for i in out)
  
 def evaluate(inputs, targets, hprev):
-    with torch.no_grad():
-        loss = 0
-        h = hprev.clone()
-        for t in range(context_len):
-            y, h = forward(inputs[:,t], hprev)
-            target_one_hot = F.one_hot(targets[:,t], num_classes=vocab_len).float()
-            loss += F.cross_entropy(y, target_one_hot)
+    Tensor.no_grad = True
+    loss = 0
+    h = hprev.clone()
+    for t in range(context_len):
+        y, h = forward(inputs[:,t], hprev)
+        target_one_hot = F.one_hot(targets[:,t], num_classes=vocab_len).float()
+        loss += target_one_hot.binary_crossentropy(y)
+    Tensor.no_grad = False
     return loss, h
 
-def train_torch(inputs, targets, hprev, lr):
+def train_auto(inputs, targets, hprev, lr):
     loss = 0
     h = hprev.clone()
     for t in range(context_len):
         y, h = forward(inputs[:,t], hprev)
         target_one_hot = F.one_hot(targets[:,t],num_classes=vocab_len).float()
         loss += F.cross_entropy(y, target_one_hot)
+        loss += target_one_hot.binary_crossentropy(y)
     for param in params: param.grad = None
     loss.backward()
     for param in params: param.data += -lr * param.grad
     return loss.detach(), h.detach()
 
+'''
 def train_manual(inputs, targets, hprev, lr):
     with torch.no_grad():
         loss = 0
@@ -200,19 +206,22 @@ def train_manual(inputs, targets, hprev, lr):
             param.data += -lr * grad
 
     return loss, h[tmax-1]
+'''
     
 train_steps = 90000
 evaluate_steps = 30000
 test_steps = 10000
 
-train = train_torch
+train = train_auto
 
+'''
 if os.getenv('MANUAL'):
     print('training GRU model with manual backprop\n')
     train = train_manual
 elif os.getenv('TORCH'):
     print('training GRU model with torch backprop\n')
     train = train_torch
+'''
 
 lossi = []
 epochs = 2
