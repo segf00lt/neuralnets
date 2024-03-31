@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import tinygrad as tg
-from tinygrad.tensor import Tensor
+from tinygrad import Tensor, TinyJit
+from tinygrad.nn.optim import SGD
 import matplotlib.pyplot as plt
 import random
 
@@ -17,9 +18,9 @@ np.random.seed(42)
 
 # hyperparams
 vocab_len = len(stoi)
-hidden_dim = 150
+hidden_dim = 200
 context_len = 8
-batch_size = 8
+batch_size = 32
 
 Wr = Tensor.randn(vocab_len, hidden_dim) * 0.01
 Ur = Tensor.randn(hidden_dim, hidden_dim) * 0.01
@@ -64,7 +65,7 @@ Xtest, Ytest = build_dataset(data[:n2])
 
 def one_hot(ix, num_classes):
     t = np.zeros(num_classes)
-    t[ix] = 1
+    t[ix.numpy()] = 1
     return Tensor(t)
 
 def forward(x, hprev):
@@ -99,42 +100,44 @@ def evaluate(inputs, targets, hprev):
     for t in range(context_len):
         y, h = forward(inputs[:,t], hprev)
         target_one_hot = one_hot(targets[:,t], num_classes=vocab_len).float()
-        loss += target_one_hot.binary_crossentropy(y)
+        ce = target_one_hot.binary_crossentropy_logits(y)
+        loss = loss + ce
     Tensor.no_grad = False
     return loss, h
 
-def train_auto(inputs, targets, hprev, lr):
-    loss = 0
+@TinyJit
+def train(inputs, targets, hprev, lr, opt):
+    loss = Tensor(0.0)
     h = hprev.detach()
     for t in range(context_len):
         y, h = forward(inputs[:,t], hprev)
         target_one_hot = one_hot(targets[:,t],num_classes=vocab_len).float()
-        loss += F.cross_entropy(y, target_one_hot)
-        loss += target_one_hot.binary_crossentropy(y)
-    for param in params: param.grad = None
+        loss = loss + y.binary_crossentropy_logits(target_one_hot)
+        #loss = loss + y.sparse_categorical_crossentropy(targets[:,t])
+    opt.zero_grad()
     loss.backward()
-    for param in params: param.data += -lr * param.grad
+    opt.step()
     return loss.detach(), h.detach()
 
 train_steps = 90000
 evaluate_steps = 30000
 test_steps = 10000
 
-train = train_auto
-
 lossi = []
 epochs = 2
+opt = SGD(params)
 for ep in range(epochs):
     hprev = Tensor.randn(hidden_dim)
     for i in range(train_steps):
         ix = np.random.randint(0, Xtrain.shape[0], size=batch_size)
         X, Y = Tensor(Xtrain[ix], requires_grad=False), Tensor(Ytrain[ix], requires_grad=False)
-        lr = 0.1 if i < (train_steps>>1) else 0.001
-        loss, hprev = train(X, Y, hprev, lr)
-        if i % 10000 == 0: # print every once in a while
+        #lr = 0.1 if i < (train_steps>>1) else 0.001
+        lr = 0.1
+        loss, hprev = train(X, Y, hprev, lr, opt)
+        if i % 1000 == 0: # print every once in a while
             print(f'train step {i}/{train_steps}: {loss.item():.4f}')
             print(f'sample: {sample(X[0][0].item())}\n')
-        lossi.append(loss.log10())
+        lossi.append(loss.log())
     evaluate_loss = 0
     for i in range(evaluate_steps):
         ix = np.random.randint(0, Xval.shape[0], size=batch_size)
@@ -142,7 +145,7 @@ for ep in range(epochs):
         loss, hprev = evaluate(X, Y, hprev)
         if i % 1000 == 0:
             print(f'evaluate step {i}/{evaluate_steps}: {loss.item():.4f}')
-        evaluate_loss += loss
+        evaluate_loss = evaluate_loss + loss
     avg_evaluate_loss = evaluate_loss/evaluate_steps
     print(f'average validation loss: {avg_evaluate_loss.item():.4f}')
     if avg_evaluate_loss <= 3.0:
